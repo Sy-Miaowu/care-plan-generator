@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 
@@ -7,6 +8,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
 
+logger = logging.getLogger(__name__)
 CARE_PLANS = {}
 
 
@@ -16,6 +18,8 @@ def index(request):
 
 @require_POST
 def create_care_plan(request):
+    logger.info("Received care plan generation request")
+
     form_data = {
         "patient_first_name": request.POST.get("patient_first_name", "").strip(),
         "patient_last_name": request.POST.get("patient_last_name", "").strip(),
@@ -32,6 +36,7 @@ def create_care_plan(request):
 
     care_plan = generate_care_plan(form_data)
     care_plan_id = str(uuid.uuid4())
+    print("care_plan_id: " + care_plan_id)
 
     CARE_PLANS[care_plan_id] = {
         "id": care_plan_id,
@@ -50,7 +55,10 @@ def create_care_plan(request):
 def generate_care_plan(form_data):
     prompt = build_prompt(form_data)
 
+    logger.info("Starting LLM care plan generation")
+
     if not os.environ.get("OPENAI_API_KEY"):
+        logger.info("LLM skipped: OPENAI_API_KEY is not set")
         return build_demo_care_plan(form_data)
 
     from openai import OpenAI
@@ -61,8 +69,10 @@ def generate_care_plan(form_data):
             model=settings.OPENAI_MODEL,
             input=prompt,
         )
+        logger.info("LLM returned care plan successfully")
         return response.output_text
     except Exception as exc:
+        logger.info("LLM generation failed: %s", exc)
         return build_demo_care_plan(form_data, reason=str(exc))
 
 
@@ -138,3 +148,10 @@ def build_demo_care_plan(form_data, reason=None):
 - Review follow-up documentation and refill history.
 - Escalate unresolved safety or adherence issues to the pharmacist or provider.
 """.strip()
+
+def get_care_plan(request, care_plan_id):
+    care_plan = CARE_PLANS.get(care_plan_id)
+    if not care_plan:
+        return JsonResponse({"error": "Care plan not found"}, status=404)
+
+    return JsonResponse(care_plan)
