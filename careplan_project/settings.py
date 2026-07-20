@@ -37,8 +37,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "careplan_project.wsgi.application"
 
-# MVP intentionally does not use a database.
-DATABASES = {}
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("POSTGRES_DB", "careplans"),
+        "USER": os.environ.get("POSTGRES_USER", "careplans"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "careplans_dev_password"),
+        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+    }
+}
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "America/Los_Angeles"

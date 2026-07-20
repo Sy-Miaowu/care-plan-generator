@@ -1,15 +1,15 @@
 import logging
 import os
-import uuid
 
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
+from careplans.models import CarePlan, Order, Patient, Provider
+
 
 logger = logging.getLogger(__name__)
-CARE_PLANS = {}
 
 
 def index(request):
@@ -34,19 +34,42 @@ def create_care_plan(request):
         "patient_records": request.POST.get("patient_records", "").strip(),
     }
 
-    care_plan = generate_care_plan(form_data)
-    care_plan_id = str(uuid.uuid4())
-    print("care_plan_id: " + care_plan_id)
+    patient, _created = Patient.objects.update_or_create(
+        mrn=form_data["mrn"],
+        defaults={
+            "first_name": form_data["patient_first_name"],
+            "last_name": form_data["patient_last_name"],
+            "dob": form_data["dob"],
+        },
+    )
+    provider, _created = Provider.objects.update_or_create(
+        npi=form_data["referring_provider_npi"],
+        defaults={"name": form_data["referring_provider"]},
+    )
+    order = Order.objects.create(
+        patient=patient,
+        provider=provider,
+        medication_name=form_data["medication_name"],
+        primary_diagnosis=form_data["primary_diagnosis"],
+        additional_diagnoses=form_data["additional_diagnoses"],
+        medication_history=form_data["medication_history"],
+        patient_records=form_data["patient_records"],
+    )
+    care_plan_record = CarePlan.objects.create(
+        order=order,
+        status=CarePlan.STATUS_PROCESSING,
+    )
 
-    CARE_PLANS[care_plan_id] = {
-        "id": care_plan_id,
-        "input": form_data,
-        "care_plan": care_plan,
-    }
+    care_plan = generate_care_plan(form_data)
+    care_plan_record.content = care_plan
+    care_plan_record.status = CarePlan.STATUS_COMPLETED
+    care_plan_record.save(update_fields=["content", "status", "updated_at"])
 
     return JsonResponse(
         {
-            "id": care_plan_id,
+            "id": str(care_plan_record.id),
+            "order_id": str(order.id),
+            "status": care_plan_record.status,
             "care_plan": care_plan,
         }
     )
@@ -150,8 +173,22 @@ def build_demo_care_plan(form_data, reason=None):
 """.strip()
 
 def get_care_plan(request, care_plan_id):
-    care_plan = CARE_PLANS.get(care_plan_id)
-    if not care_plan:
+    try:
+        care_plan = CarePlan.objects.select_related(
+            "order",
+            "order__patient",
+            "order__provider",
+        ).get(id=care_plan_id)
+    except CarePlan.DoesNotExist:
         return JsonResponse({"error": "Care plan not found"}, status=404)
 
-    return JsonResponse(care_plan)
+    return JsonResponse(
+        {
+            "id": str(care_plan.id),
+            "order_id": str(care_plan.order_id),
+            "status": care_plan.status,
+            "input": care_plan.input_payload(),
+            "care_plan": care_plan.content,
+            "created_at": care_plan.created_at.isoformat(),
+        }
+    )
