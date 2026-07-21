@@ -8,9 +8,9 @@ This first version intentionally keeps everything simple:
 - One HTML page
 - One asynchronous submit API: `POST /api/care-plans/`
 - PostgreSQL storage
-- Redis queue for pending care plan jobs
+- Redis-backed Celery task queue
+- Celery worker for background care plan generation
 - No tests
-- No worker
 - No websocket
 - No Controller-Service-Repository layering
 
@@ -55,22 +55,32 @@ Then run:
 docker compose --env-file .env up --build
 ```
 
-The submit API no longer calls the LLM directly. The LLM helper remains in the codebase for the future worker that will consume queued care plan jobs.
+The submit API does not call the LLM directly. The Celery worker consumes queued care plan jobs and calls the LLM in the background.
 
 ## Current Async Flow
 
 `POST /api/care-plans/` now:
 
-1. Persists the patient, provider, order, and `CarePlan(status="pending")`.
-2. Pushes the `care_plan_id` into the Redis list named by `CAREPLAN_QUEUE_NAME`.
+1. Persists the patient, provider, `Order(status="pending")`, and `CarePlan(status="pending")`.
+2. Queues a Celery task with the `care_plan_id`.
 3. Returns `202 Accepted` with `message`, `id`, `order_id`, and `status`.
 
-The worker that consumes this Redis queue is intentionally not implemented yet.
+The Celery worker:
+
+1. Receives the `care_plan_id` from Redis.
+2. Marks the matching `Order` and `CarePlan` as `processing`.
+3. Calls the LLM care plan generator.
+4. Saves the generated content and marks the `Order` and `CarePlan` as `completed`.
+5. Retries failures up to 3 times with exponential backoff.
+
+The frontend intentionally does not receive an automatic update. Refresh or manually fetch the care plan later to see the completed result.
 
 ## Main Files
 
 - `careplans/models.py`: `Patient`, `Provider`, `Order`, and `CarePlan` database tables
-- `careplans/views.py`: form API, database persistence, Redis enqueue, LLM helper for the future worker
+- `careplans/views.py`: form API, database persistence, Celery enqueue, LLM helper
+- `careplans/tasks.py`: Celery task for background care plan generation
+- `careplan_project/celery.py`: Celery app configuration
 - `careplans/templates/careplans/index.html`: minimal frontend
 - `careplan_project/settings.py`: minimal Django settings
 - `docker-compose.yml`: local Docker runner

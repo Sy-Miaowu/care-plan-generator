@@ -60,6 +60,10 @@ OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 CAREPLAN_QUEUE_NAME = os.environ.get("CAREPLAN_QUEUE_NAME", "careplan_queue")
 
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", REDIS_URL)
+CELERY_TASK_TRACK_STARTED = True
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

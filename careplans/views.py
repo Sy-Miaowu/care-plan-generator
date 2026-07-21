@@ -6,8 +6,6 @@ from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
-from redis import Redis
-from redis.exceptions import RedisError
 
 from careplans.models import CarePlan, Order, Patient, Provider
 
@@ -59,6 +57,7 @@ def create_care_plan(request):
                 additional_diagnoses=form_data["additional_diagnoses"],
                 medication_history=form_data["medication_history"],
                 patient_records=form_data["patient_records"],
+                status=Order.STATUS_PENDING,
             )
             care_plan_record = CarePlan.objects.create(
                 order=order,
@@ -67,10 +66,10 @@ def create_care_plan(request):
             care_plan_id = care_plan_record.id
             order_id = order.id
             transaction.on_commit(lambda: enqueue_care_plan(care_plan_id))
-    except RedisError:
-        logger.exception("Failed to enqueue care plan generation request")
+    except Exception:
+        logger.exception("Failed to create care plan generation request")
         return JsonResponse(
-            {"error": "Care plan was not queued. Please try again."},
+            {"error": "Care plan request failed. Please try again."},
             status=503,
         )
 
@@ -86,12 +85,13 @@ def create_care_plan(request):
 
 
 def enqueue_care_plan(care_plan_id):
-    redis_client = Redis.from_url(settings.REDIS_URL)
-    redis_client.rpush(settings.CAREPLAN_QUEUE_NAME, str(care_plan_id))
-    logger.info("Queued care plan %s in %s", care_plan_id, settings.CAREPLAN_QUEUE_NAME)
+    from careplans.tasks import generate_care_plan_task
+
+    generate_care_plan_task.delay(str(care_plan_id))
+    logger.info("Queued Celery care plan task for %s", care_plan_id)
 
 
-def generate_care_plan(form_data):
+def generate_care_plan(form_data, fallback_on_error=True):
     prompt = build_prompt(form_data)
 
     logger.info("Starting LLM care plan generation")
@@ -112,6 +112,8 @@ def generate_care_plan(form_data):
         return response.output_text
     except Exception as exc:
         logger.info("LLM generation failed: %s", exc)
+        if not fallback_on_error:
+            raise
         return build_demo_care_plan(form_data, reason=str(exc))
 
 
@@ -203,6 +205,7 @@ def get_care_plan(request, care_plan_id):
             "id": str(care_plan.id),
             "order_id": str(care_plan.order_id),
             "status": care_plan.status,
+            "order_status": care_plan.order.status,
             "input": care_plan.input_payload(),
             "care_plan": care_plan.content,
             "created_at": care_plan.created_at.isoformat(),
