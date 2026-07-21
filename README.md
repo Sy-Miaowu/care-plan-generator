@@ -43,9 +43,27 @@ Create a local `.env` file:
 cp .env.example .env
 ```
 
-Edit `.env` and set:
+Development uses the mock LLM by default:
 
 ```text
+CAREPLAN_LLM_PROVIDER=mock
+```
+
+With this setting, the full async worker flow still runs:
+
+```text
+POST /api/care-plans/
+-> Redis queue
+-> Celery worker
+-> mock LLM function
+-> PostgreSQL CarePlan(status="completed", content="...")
+-> frontend polling
+```
+
+To use the real OpenAI-backed generator, edit `.env` and set:
+
+```text
+CAREPLAN_LLM_PROVIDER=openai
 OPENAI_API_KEY=your_real_key
 ```
 

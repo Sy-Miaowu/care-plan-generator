@@ -213,9 +213,60 @@
       const button = document.getElementById("submit-button");
       const output = document.getElementById("care-plan-output");
       const errorMessage = document.getElementById("error-message");
+      let pollTimeoutId = null;
+
+      function stopPolling() {
+        if (pollTimeoutId) {
+          clearTimeout(pollTimeoutId);
+          pollTimeoutId = null;
+        }
+      }
+
+      async function pollCarePlanStatus(carePlanId) {
+        try {
+          const response = await fetch(`/api/careplan/${carePlanId}/status/`, {
+            cache: "no-store",
+          });
+
+          if (!response.ok) {
+            throw new Error(`Status check failed with status ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          if (data.status === "completed") {
+            stopPolling();
+            output.textContent = data.content || "Care plan completed, but no content was returned.";
+            button.disabled = false;
+            button.textContent = "Submit Care Plan Request";
+            return;
+          }
+
+          if (data.status === "failed") {
+            stopPolling();
+            errorMessage.textContent = data.error || "Care plan generation failed.";
+            errorMessage.style.display = "block";
+            output.textContent = "Care plan generation failed.";
+            button.disabled = false;
+            button.textContent = "Submit Care Plan Request";
+            return;
+          }
+
+          output.textContent = `Care plan ID: ${data.id}\nStatus: ${data.status}\n\nGenerating care plan...`;
+          pollTimeoutId = setTimeout(() => pollCarePlanStatus(carePlanId), 3000);
+        } catch (error) {
+          stopPolling();
+          errorMessage.textContent = error.message;
+          errorMessage.style.display = "block";
+          output.textContent = "Could not check care plan status.";
+          button.disabled = false;
+          button.textContent = "Submit Care Plan Request";
+        }
+      }
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
+        stopPolling();
 
         button.disabled = true;
         button.textContent = "Submitting...";
@@ -233,12 +284,14 @@
           }
 
           const data = await response.json();
-          output.textContent = `${data.message}\nCare plan ID: ${data.id}\nOrder ID: ${data.order_id}\nStatus: ${data.status}`;
+          output.textContent = `${data.message}\nCare plan ID: ${data.id}\nOrder ID: ${data.order_id}\nStatus: ${data.status}\n\nGenerating care plan...`;
+          button.textContent = "Generating...";
+          pollCarePlanStatus(data.id);
         } catch (error) {
+          stopPolling();
           errorMessage.textContent = error.message;
           errorMessage.style.display = "block";
           output.textContent = "Care plan request failed.";
-        } finally {
           button.disabled = false;
           button.textContent = "Submit Care Plan Request";
         }

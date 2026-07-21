@@ -44,6 +44,7 @@ services:
       CELERY_BROKER_URL: "${CELERY_BROKER_URL:-redis://redis:6379/0}"
       CELERY_RESULT_BACKEND: "${CELERY_RESULT_BACKEND:-redis://redis:6379/0}"
       CAREPLAN_QUEUE_NAME: "${CAREPLAN_QUEUE_NAME:-careplan_queue}"
+      CAREPLAN_LLM_PROVIDER: "${CAREPLAN_LLM_PROVIDER:-mock}"
       OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4.1-mini}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
     volumes:
@@ -69,6 +70,7 @@ services:
       CELERY_BROKER_URL: "${CELERY_BROKER_URL:-redis://redis:6379/0}"
       CELERY_RESULT_BACKEND: "${CELERY_RESULT_BACKEND:-redis://redis:6379/0}"
       CAREPLAN_QUEUE_NAME: "${CAREPLAN_QUEUE_NAME:-careplan_queue}"
+      CAREPLAN_LLM_PROVIDER: "${CAREPLAN_LLM_PROVIDER:-mock}"
       OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4.1-mini}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
     volumes:

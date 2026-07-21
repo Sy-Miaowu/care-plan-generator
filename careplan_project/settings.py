@@ -56,6 +56,11 @@ USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+CAREPLAN_LLM_PROVIDER = os.environ.get(
+    "CAREPLAN_LLM_PROVIDER",
+    "mock" if DEBUG else "openai",
+).lower()
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 CAREPLAN_QUEUE_NAME = os.environ.get("CAREPLAN_QUEUE_NAME", "careplan_queue")
