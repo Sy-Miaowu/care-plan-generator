@@ -57,6 +57,8 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+CAREPLAN_QUEUE_NAME = os.environ.get("CAREPLAN_QUEUE_NAME", "careplan_queue")
 
 LOGGING = {
     "version": 1,

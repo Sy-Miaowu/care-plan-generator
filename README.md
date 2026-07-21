@@ -6,10 +6,10 @@ This first version intentionally keeps everything simple:
 
 - Django backend
 - One HTML page
-- One synchronous API: `POST /api/care-plans/`
+- One asynchronous submit API: `POST /api/care-plans/`
 - PostgreSQL storage
+- Redis queue for pending care plan jobs
 - No tests
-- No queue
 - No worker
 - No websocket
 - No Controller-Service-Repository layering
@@ -35,7 +35,7 @@ Then open:
 http://localhost:8000
 ```
 
-## Use Real LLM Generation
+## LLM Configuration
 
 Create a local `.env` file:
 
@@ -55,12 +55,22 @@ Then run:
 docker compose --env-file .env up --build
 ```
 
-If `OPENAI_API_KEY` is not set, the app returns a demo care plan so the frontend/backend flow still works.
+The submit API no longer calls the LLM directly. The LLM helper remains in the codebase for the future worker that will consume queued care plan jobs.
+
+## Current Async Flow
+
+`POST /api/care-plans/` now:
+
+1. Persists the patient, provider, order, and `CarePlan(status="pending")`.
+2. Pushes the `care_plan_id` into the Redis list named by `CAREPLAN_QUEUE_NAME`.
+3. Returns `202 Accepted` with `message`, `id`, `order_id`, and `status`.
+
+The worker that consumes this Redis queue is intentionally not implemented yet.
 
 ## Main Files
 
 - `careplans/models.py`: `Patient`, `Provider`, `Order`, and `CarePlan` database tables
-- `careplans/views.py`: form API, database persistence, LLM call, demo fallback
+- `careplans/views.py`: form API, database persistence, Redis enqueue, LLM helper for the future worker
 - `careplans/templates/careplans/index.html`: minimal frontend
 - `careplan_project/settings.py`: minimal Django settings
 - `docker-compose.yml`: local Docker runner

@@ -1,3 +1,4 @@
 Django==5.0.7
 openai==1.97.0
 psycopg[binary]==3.2.9
+redis==5.2.1

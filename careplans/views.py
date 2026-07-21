@@ -2,9 +2,12 @@ import logging
 import os
 
 from django.conf import settings
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
+from redis import Redis
+from redis.exceptions import RedisError
 
 from careplans.models import CarePlan, Order, Patient, Provider
 
@@ -34,45 +37,58 @@ def create_care_plan(request):
         "patient_records": request.POST.get("patient_records", "").strip(),
     }
 
-    patient, _created = Patient.objects.update_or_create(
-        mrn=form_data["mrn"],
-        defaults={
-            "first_name": form_data["patient_first_name"],
-            "last_name": form_data["patient_last_name"],
-            "dob": form_data["dob"],
-        },
-    )
-    provider, _created = Provider.objects.update_or_create(
-        npi=form_data["referring_provider_npi"],
-        defaults={"name": form_data["referring_provider"]},
-    )
-    order = Order.objects.create(
-        patient=patient,
-        provider=provider,
-        medication_name=form_data["medication_name"],
-        primary_diagnosis=form_data["primary_diagnosis"],
-        additional_diagnoses=form_data["additional_diagnoses"],
-        medication_history=form_data["medication_history"],
-        patient_records=form_data["patient_records"],
-    )
-    care_plan_record = CarePlan.objects.create(
-        order=order,
-        status=CarePlan.STATUS_PROCESSING,
-    )
-
-    care_plan = generate_care_plan(form_data)
-    care_plan_record.content = care_plan
-    care_plan_record.status = CarePlan.STATUS_COMPLETED
-    care_plan_record.save(update_fields=["content", "status", "updated_at"])
+    try:
+        with transaction.atomic():
+            patient, _created = Patient.objects.update_or_create(
+                mrn=form_data["mrn"],
+                defaults={
+                    "first_name": form_data["patient_first_name"],
+                    "last_name": form_data["patient_last_name"],
+                    "dob": form_data["dob"],
+                },
+            )
+            provider, _created = Provider.objects.update_or_create(
+                npi=form_data["referring_provider_npi"],
+                defaults={"name": form_data["referring_provider"]},
+            )
+            order = Order.objects.create(
+                patient=patient,
+                provider=provider,
+                medication_name=form_data["medication_name"],
+                primary_diagnosis=form_data["primary_diagnosis"],
+                additional_diagnoses=form_data["additional_diagnoses"],
+                medication_history=form_data["medication_history"],
+                patient_records=form_data["patient_records"],
+            )
+            care_plan_record = CarePlan.objects.create(
+                order=order,
+                status=CarePlan.STATUS_PENDING,
+            )
+            care_plan_id = care_plan_record.id
+            order_id = order.id
+            transaction.on_commit(lambda: enqueue_care_plan(care_plan_id))
+    except RedisError:
+        logger.exception("Failed to enqueue care plan generation request")
+        return JsonResponse(
+            {"error": "Care plan was not queued. Please try again."},
+            status=503,
+        )
 
     return JsonResponse(
         {
-            "id": str(care_plan_record.id),
-            "order_id": str(order.id),
-            "status": care_plan_record.status,
-            "care_plan": care_plan,
-        }
+            "id": str(care_plan_id),
+            "order_id": str(order_id),
+            "status": CarePlan.STATUS_PENDING,
+            "message": "Received",
+        },
+        status=202,
     )
+
+
+def enqueue_care_plan(care_plan_id):
+    redis_client = Redis.from_url(settings.REDIS_URL)
+    redis_client.rpush(settings.CAREPLAN_QUEUE_NAME, str(care_plan_id))
+    logger.info("Queued care plan %s in %s", care_plan_id, settings.CAREPLAN_QUEUE_NAME)
 
 
 def generate_care_plan(form_data):

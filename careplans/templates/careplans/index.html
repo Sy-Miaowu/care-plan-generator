@@ -135,7 +135,7 @@
   <body>
     <main>
       <h1>Care Plan Generator</h1>
-      <p class="subtitle">Minimal MVP: submit patient/order details and generate a draft care plan.</p>
+      <p class="subtitle">Minimal MVP: submit patient/order details and queue a draft care plan request.</p>
 
       <div class="layout">
         <form id="care-plan-form">
@@ -198,12 +198,12 @@
           </fieldset>
 
           <p class="error" id="error-message"></p>
-          <button id="submit-button" type="submit">Generate Care Plan</button>
+          <button id="submit-button" type="submit">Submit Care Plan Request</button>
         </form>
 
         <section class="result">
-          <h2>Generated Care Plan</h2>
-          <pre id="care-plan-output">Submit the form to generate a care plan.</pre>
+          <h2>Care Plan Request</h2>
+          <pre id="care-plan-output">Submit the form to queue a care plan request.</pre>
         </section>
       </div>
     </main>
@@ -218,9 +218,9 @@
         event.preventDefault();
 
         button.disabled = true;
-        button.textContent = "Generating...";
+        button.textContent = "Submitting...";
         errorMessage.style.display = "none";
-        output.textContent = "Waiting for care plan generation...";
+        output.textContent = "Submitting care plan request...";
 
         try {
           const response = await fetch("/api/care-plans/", {
@@ -233,14 +233,14 @@
           }
 
           const data = await response.json();
-          output.textContent = data.care_plan;
+          output.textContent = `${data.message}\nCare plan ID: ${data.id}\nOrder ID: ${data.order_id}\nStatus: ${data.status}`;
         } catch (error) {
           errorMessage.textContent = error.message;
           errorMessage.style.display = "block";
-          output.textContent = "Care plan generation failed.";
+          output.textContent = "Care plan request failed.";
         } finally {
           button.disabled = false;
-          button.textContent = "Generate Care Plan";
+          button.textContent = "Submit Care Plan Request";
         }
       });
     </script>
