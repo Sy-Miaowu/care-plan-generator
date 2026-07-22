@@ -4,7 +4,7 @@ from celery import shared_task
 from django.db import transaction
 
 from careplans.models import CarePlan, Order
-from careplans.views import generate_care_plan
+from careplans.services import generate_care_plan
 
 
 logger = logging.getLogger(__name__)
